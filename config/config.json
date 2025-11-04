@@ -1,0 +1,32 @@
+{
+  "adafruit_io": {
+    "username": "YOUR_AIO_USERNAME",
+    "key": "YOUR_AIO_KEY",
+    "host": "io.adafruit.com",
+    "port": 8883,
+    "use_tls": true,
+    "feeds": {
+      "motion": "sensor.motion",
+      "temperature": "sensor.temperature",
+      "humidity": "sensor.humidity"
+    }
+  },
+  "pins": {
+    "pir_bcm": 17,
+    "dht_bcm": 4,
+    "led_bcm": 27,
+    "beeper_bcm": 22,
+    "fan_bcm": 23,
+    "relay_bcm": 24
+  },
+  "camera": {
+    "device_index": 0,
+    "width": 1280,
+    "height": 720
+  },
+  "logic": {
+    "read_interval_seconds": 5,
+    "motion_alarm_seconds": 3,
+    "pir_debounce_seconds": 1.0
+  }
+}

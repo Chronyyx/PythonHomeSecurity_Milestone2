@@ -1,0 +1,7 @@
+paho-mqtt==1.6.1
+gpiozero==2.0
+RPi.GPIO==0.7.1
+adafruit-circuitpython-dht>=4.0.2
+opencv-python==4.10.0.84
+numpy>=1.26
+requests>=2.31.0
