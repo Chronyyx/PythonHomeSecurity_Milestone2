@@ -42,7 +42,7 @@ def main():
     pir = PirReader(pins["pir_bcm"], debounce_s=logic["pir_debounce_seconds"])
     dht = DhtReader(pins["dht_bcm"])
     cam = UsbCamera(device_index=cam_cfg["device_index"], width=cam_cfg["width"], height=cam_cfg["height"])
-    acts = Actuators(pins["led_bcm"], pins["beeper_bcm"], pins["fan_bcm"], pins["relay_bcm"])
+    acts = Actuators(pins["led_bcm"], pins["beeper_bcm"], pins["servo_bcm"])
 
     client = AdafruitIOClient(
         username=aio_cfg["username"],

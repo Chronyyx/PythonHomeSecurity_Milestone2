@@ -1,37 +1,38 @@
 """
-Actuators: LED, beeper, fan, relay.
-Fan now toggles with motion (part of alarm).
+Actuators: LED, beeper, SG90 servo motor (instead of fan and relay).
 """
 import logging
-from gpiozero import LED
+from gpiozero import LED, Servo
+from time import sleep
 
 class Actuators:
-    def __init__(self, led_bcm: int, beeper_bcm: int, fan_bcm: int, relay_bcm: int):
+    def __init__(self, led_bcm: int, beeper_bcm: int, servo_bcm: int):
         self.led = LED(led_bcm)
         self.beeper = LED(beeper_bcm)
-        self.fan = LED(fan_bcm)
-        self.relay = LED(relay_bcm)
-        self._fan_on = False
+        self.servo = Servo(servo_bcm)
+        self._servo_active = False
 
     def alarm_on(self):
         self.led.on()
         self.beeper.on()
-        self.relay.on()
-        self.fan.on()
-        self._fan_on = True
-        logging.debug("Alarm ON: LED+Beeper+Relay+Fan set HIGH")
+        self.servo.max()  # or self.servo.value = 1
+        self._servo_active = True
+        logging.debug("Alarm ON: LED + Beeper + Servo activated")
 
     def alarm_off(self):
         self.led.off()
         self.beeper.off()
-        self.relay.off()
-        self.fan.off()
-        self._fan_on = False
-        logging.debug("Alarm OFF: LED+Beeper+Relay+Fan set LOW")
+        self.servo.mid()  # return to neutral
+        self._servo_active = False
+        logging.debug("Alarm OFF: LED + Beeper + Servo deactivated")
 
     def shutdown(self):
-        for dev in (self.led, self.beeper, self.fan, self.relay):
+        for dev in (self.led, self.beeper):
             try:
                 dev.off()
             except Exception:
                 pass
+        try:
+            self.servo.detach()
+        except Exception:
+            pass

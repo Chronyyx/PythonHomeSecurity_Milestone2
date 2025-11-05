@@ -12,12 +12,11 @@
     }
   },
   "pins": {
-    "pir_bcm": 17,
-    "dht_bcm": 4,
-    "led_bcm": 27,
-    "beeper_bcm": 22,
-    "fan_bcm": 23,
-    "relay_bcm": 24
+    "led_bcm": 17,
+    "beeper_bcm": 27,
+    "servo_bcm": 22,
+    "dht_bcm": "D4",
+    "pir_bcm": 23
   },
   "camera": {
     "device_index": 0,

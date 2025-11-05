@@ -29,36 +29,27 @@ class PirReader:
             self._last_change = now
         return self._last_state
 
+import time
+import logging
+import adafruit_dht
+import board
+
+
 class DhtReader:
-    def __init__(self, dht_bcm: int):
-        # Map BCM pin to board pin for CircuitPython
-        bcm_to_board = {
-            4: getattr(board, "D4", None),
-            17: getattr(board, "D17", None),
-            27: getattr(board, "D27", None),
-            22: getattr(board, "D22", None),
-            5: getattr(board, "D5", None),
-            6: getattr(board, "D6", None),
-            12: getattr(board, "D12", None),
-            13: getattr(board, "D13", None),
-            16: getattr(board, "D16", None),
-            18: getattr(board, "D18", None),
-            23: getattr(board, "D23", None),
-            24: getattr(board, "D24", None),
-            25: getattr(board, "D25", None),
-        }
-        pin_obj = bcm_to_board.get(dht_bcm)
+    def __init__(self, board_pin_str: str):
+        pin_obj = getattr(board, board_pin_str, None)
         if pin_obj is None:
-            raise RuntimeError(f"Unsupported DHT BCM pin {dht_bcm} for CircuitPython mapping")
-        # Use DHT11; change to DHT22 if you upgrade the sensor
-        self._dht = adafruit_dht.DHT11(pin_obj, use_pulseio=False)
+            raise RuntimeError(f"Invalid board pin '{board_pin_str}' for CircuitPython DHT")
+        self._pin_obj = pin_obj
 
     def read(self):
-        # CircuitPython lib requires delays and can raise RuntimeError intermittently
+        dht = None
         try:
-            time.sleep(2.0)
-            temp = self._dht.temperature
-            hum = self._dht.humidity
+            # create a fresh sensor for each read (more reliable under systemd / other libs)
+            dht = adafruit_dht.DHT11(self._pin_obj, use_pulseio=False)
+            time.sleep(2.0)  # required settle time
+            temp = dht.temperature
+            hum = dht.humidity
             if temp is None or hum is None:
                 logging.warning("DHT11 read returned None values")
                 return None, None
@@ -66,6 +57,13 @@ class DhtReader:
         except Exception as e:
             logging.warning("DHT11 read exception: %s", e)
             return None, None
+        finally:
+            try:
+                if dht is not None:
+                    dht.exit()
+            except Exception:
+                pass
+
 
 class UsbCamera:
     def __init__(self, device_index: int = 0, width: int = 1280, height: int = 720, images_dir: str = "data/images"):
