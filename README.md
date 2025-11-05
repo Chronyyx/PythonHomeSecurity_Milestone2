@@ -44,9 +44,6 @@ pip install -r requirements.txt
 python src/main.py
 ```
 
-### DHT11 — library requirement
-
-This repo now **only supports** CircuitPython `adafruit_dht`.
 
 Install once on Raspberry Pi OS:
 ```bash
