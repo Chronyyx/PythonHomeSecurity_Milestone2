@@ -45,17 +45,25 @@ class DhtReader:
     def read(self):
         dht = None
         try:
-            # create a fresh sensor for each read (more reliable under systemd / other libs)
-            dht = adafruit_dht.DHT11(self._pin_obj, use_pulseio=False)
+            dht = adafruit_dht.DHT11(self._pin_obj)
             time.sleep(2.0)  # required settle time
             temp = dht.temperature
             hum = dht.humidity
             if temp is None or hum is None:
-                logging.warning("DHT11 read returned None values")
+                logging.debug("DHT11 read returned None values")
                 return None, None
             return float(temp), float(hum)
         except Exception as e:
-            logging.warning("DHT11 read exception: %s", e)
+            msg = str(e)
+            expected_errors = (
+                "Checksum did not validate",
+                "A full buffer was not returned",
+                "DHT sensor not found"
+            )
+            if any(err in msg for err in expected_errors):
+                logging.debug("DHT11 retryable error: %s", msg)
+            else:
+                logging.warning("DHT11 unexpected error: %s", msg)
             return None, None
         finally:
             try:
