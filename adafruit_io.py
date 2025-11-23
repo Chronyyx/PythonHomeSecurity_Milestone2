@@ -1,7 +1,3 @@
-"""
-MIT License
-Adafruit IO MQTT helper (TLS, QoS 1)
-"""
 import ssl, time, json, logging
 import paho.mqtt.client as mqtt
 
@@ -22,22 +18,22 @@ class AdafruitIOClient:
         self._connected = False
 
     def _on_connect(self, client, userdata, flags, rc):
-        logging.info("Adafruit IO connected rc=%s", rc)
-        self._connected = True
+        if rc == 0:
+            logging.info("Adafruit IO connected")
+            self._connected = True
+        else:
+            logging.error(f"Adafruit IO connection failed, rc={rc}")
 
     def _on_disconnect(self, client, userdata, rc):
-        logging.warning("Adafruit IO disconnected rc=%s", rc)
+        logging.warning(f"Adafruit IO disconnected rc={rc}")
         self._connected = False
 
-    def connect(self, timeout=10):
-        self.client.connect(self.host, self.port, keepalive=60)
-        self.client.loop_start()
-        import time
-        t0 = time.time()
-        while not self._connected and (time.time() - t0) < timeout:
-            time.sleep(0.1)
-        if not self._connected:
-            raise TimeoutError("MQTT connect timeout")
+    def connect_non_blocking(self):
+        try:
+            self.client.connect_async(self.host, self.port, keepalive=60)
+            self.client.loop_start()
+        except Exception as e:
+            logging.error(f"Failed to initiate MQTT connection: {e}")
 
     def disconnect(self):
         try:
@@ -49,7 +45,11 @@ class AdafruitIOClient:
     def _topic(self, feed_key):
         return f"{self.username}/feeds/{feed_key}"
 
-    def publish_number(self, feed_key, value, retain=False, qos=1):
-        payload = json.dumps({"value": value})
-        info = self.client.publish(self._topic(feed_key), payload=payload, qos=qos, retain=retain)
-        return info.wait_for_publish(timeout=5)
+    def publish(self, feed_key, value):
+        if not self._connected:
+            return # Fail silently if offline
+        try:
+            payload = json.dumps({"value": value})
+            self.client.publish(self._topic(feed_key), payload=payload, qos=1)
+        except Exception as e:
+            logging.error(f"MQTT publish error: {e}")

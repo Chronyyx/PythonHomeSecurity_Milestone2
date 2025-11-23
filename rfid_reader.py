@@ -1,32 +1,38 @@
-import time
-from mfrc522 import SimpleMFRC522
 import RPi.GPIO as GPIO
+from mfrc522 import MFRC522
+import logging
 
 class RFIDReader:
     def __init__(self):
-        self.reader = SimpleMFRC522()
-    
-    def read_no_block(self):
-        """Non-blocking RFID read with timeout"""
+        # Suppress GPIO warnings
+        GPIO.setwarnings(False)
+        self.reader = MFRC522()
+
+    def scan(self):
+        """
+        Polls for a card. Returns (status, tag_type)
+        This is a non-blocking check using the low-level library.
+        """
         try:
-            # Set a very short timeout
-            import signal
+            # Scan for cards
+            (status, TagType) = self.reader.MFRC522_Request(self.reader.PICC_REQIDL)
             
-            def timeout_handler(signum, frame):
-                raise TimeoutError()
+            if status == self.reader.MI_OK:
+                # Get UID
+                (status, uid) = self.reader.MFRC522_Anticoll()
+                if status == self.reader.MI_OK:
+                    # Convert UID list to integer
+                    # UID is usually a list like [12, 34, 56, 78, 90]
+                    rfid_int = 0
+                    for i in range(0, len(uid)):
+                        rfid_int += uid[i] << (i*8)
+                    return rfid_int
             
-            # Try to read for max 0.1 seconds
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.setitimer(signal.ITIMER_REAL, 0.1)
-            
-            try:
-                id, text = self.reader.read_no_block()
-                signal.alarm(0)  # Cancel alarm
-                return id, text
-            except TimeoutError:
-                return None, None
-        except:
-            return None, None
-    
+            return None
+        except Exception as e:
+            logging.error(f"RFID Scan error: {e}")
+            return None
+
     def cleanup(self):
-        GPIO.cleanup()
+        # MFRC522 doesn't have a dedicated cleanup that doesn't kill GPIO
+        pass
