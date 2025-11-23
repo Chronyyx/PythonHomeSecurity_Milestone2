@@ -12,6 +12,14 @@ GPIO.setup(servo_pin, GPIO.OUT)
 pwm = GPIO.PWM(servo_pin, 50)
 pwm.start(0)
 
+def read_no_block(self):
+    """Non-blocking RFID read"""
+    try:
+        id, text = self.read_id_no_block()
+        return id, text
+    except:
+        return None, None
+    
 def set_angle(angle):
     duty = 2 + (angle / 18) # basic conversion
     GPIO.output(servo_pin, True)
