@@ -11,8 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any
 from enum import Enum
+from rfid_reader import RFIDReader
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, render_template
 from flask_cors import CORS
 
 from sensors import PirReader, DhtReader, UsbCamera
@@ -39,7 +40,17 @@ class LEDState(Enum):
 
 def load_config(path="config/config.json"):
     with open(path, "r") as f:
-        return json.load(f)
+        config = json.load(f)
+    
+    # Override with environment variables
+    config["adafruit_io"]["username"] = os.getenv("ADAFRUIT_IO_USERNAME")
+    config["adafruit_io"]["key"] = os.getenv("ADAFRUIT_IO_KEY")
+    
+    # Load authorized RFID IDs from environment
+    rfid_ids_str = os.getenv("AUTHORIZED_RFID_IDS", "565967042481")
+    config["authorized_rfids"] = [int(id.strip()) for id in rfid_ids_str.split(",")]
+    
+    return config
 
 def setup_logging(log_dir="logs"):
     Path(log_dir).mkdir(parents=True, exist_ok=True)
@@ -87,7 +98,7 @@ class SecuritySystem:
         
         # RFID setup
         GPIO.setmode(GPIO.BCM)
-        self.rfid_reader = SimpleMFRC522()
+        self.rfid_reader = RFIDReader()
         self.authorized_rfid_ids = config.get("authorized_rfids", [565967042481])
         
         # Adafruit IO
@@ -648,6 +659,12 @@ def settings():
         
         system.log_event("SETTINGS_UPDATED", str(data))
         return jsonify({"success": True, "message": "Settings updated"})
+
+
+@app.route('/')
+def index():
+    """Serve the dashboard"""
+    return render_template('index.html')
 
 @app.route('/api/health', methods=['GET'])
 def health_check():

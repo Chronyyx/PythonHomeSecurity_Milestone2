@@ -1,7 +1,5 @@
 {
   "adafruit_io": {
-    "username": "YOUR_AIO_USERNAME",
-    "key": "YOUR_AIO_KEY",
     "host": "io.adafruit.com",
     "port": 8883,
     "use_tls": true,
@@ -15,7 +13,7 @@
     }
   },
   "pins": {
-    "led_bcm": 17,
+    "led_bcm": 27,
     "beeper_bcm": 13,
     "servo_bcm": 18,
     "dht_bcm": "D4",
@@ -35,6 +33,6 @@
     "motion_timeout_seconds": 60,
     "photo_interval_seconds": 5
   },
-  
+
   "authorized_rfids": [565967042481]
 }
