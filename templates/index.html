@@ -510,6 +510,10 @@
             <h1>AnLex Guard</h1>
             <div class="sub">Home Security System</div>
           </div>
+          <span class="badge">
+          <span class="dot ok" id="conn-dot"></span>
+          <span id="conn-text">Connected</span>
+          </span>
         </div>
         <div class="top-actions">
           <button class="btn primary" id="btn-arm" onclick="armSystem()">
@@ -523,14 +527,43 @@
           >
             <span>🔓</span> Disarm
           </button>
-          <span class="badge">
-            <span class="dot ok" id="conn-dot"></span>
-            <span id="conn-text">Connected</span>
-          </span>
         </div>
       </header>
 
       <section class="grid">
+
+        <!-- Live Camera -->
+        <article class="card span-12">
+          <div class="hd">
+            <h2>Latest Snapshot</h2>
+            <span class="pill" id="photo-count">0 photos captured</span>
+          </div>
+          <div class="bd">
+            <div class="camera-view" id="camera-container">
+              <div class="camera-placeholder">
+                <div>
+                  <div style="font-size: 48px; margin-bottom: 12px">📷</div>
+                  <div>No snapshot available</div>
+                  <div style="font-size: 12px; margin-top: 8px">
+                    Click "Capture Now" to take a photo
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn primary" onclick="capturePhoto()">
+                <span>📸</span> Capture Now
+              </button>
+              <button class="btn" onclick="refreshCamera()">
+                <span>🔄</span> Refresh
+              </button>
+              <button class="btn" onclick="openGallery()">
+                <span>🖼️</span> View Gallery
+              </button>
+            </div>
+          </div>
+        </article>
+
         <!-- System Status -->
         <article class="card span-4">
           <div class="hd">
@@ -577,37 +610,7 @@
           </div>
         </article>
 
-        <!-- Live Camera -->
-        <article class="card span-8">
-          <div class="hd">
-            <h2>Latest Snapshot</h2>
-            <span class="pill" id="photo-count">0 photos captured</span>
-          </div>
-          <div class="bd">
-            <div class="camera-view" id="camera-container">
-              <div class="camera-placeholder">
-                <div>
-                  <div style="font-size: 48px; margin-bottom: 12px">📷</div>
-                  <div>No snapshot available</div>
-                  <div style="font-size: 12px; margin-top: 8px">
-                    Click "Capture Now" to take a photo
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="actions">
-              <button class="btn primary" onclick="capturePhoto()">
-                <span>📸</span> Capture Now
-              </button>
-              <button class="btn" onclick="refreshCamera()">
-                <span>🔄</span> Refresh
-              </button>
-              <button class="btn" onclick="openGallery()">
-                <span>🖼️</span> View Gallery
-              </button>
-            </div>
-          </div>
-        </article>
+        
 
         <!-- Sensors -->
         <article class="card span-4">
@@ -667,13 +670,15 @@
               <span>💡</span> Test LED (3s)
             </button>
 
-            <button class="btn" onclick="testActuator('beeper', 'on')">
+            <button class="btn" onclick="testActuator('buzzer', 'on')">
               <span>🔊</span> Test Buzzer (3s)
             </button>
-
-            <!-- CHANGED: Passing string 'unlock' instead of number 90 -->
+          
             <button class="btn" onclick="testActuator('servo', 'unlock')">
               <span>🔓</span> Unlock Servo (3s)
+            </button>
+            <button class="btn" onclick="testActuator('servo', 'lock')">
+              <span>🔒</span> Lock Servo (3s)
             </button>
 
             <button class="btn primary" onclick="testActuator('camera', null)">
@@ -697,7 +702,7 @@
         </article>
 
         <!-- Event Log -->
-        <article class="card span-8">
+        <article class="card span-12">
           <div class="hd">
             <h2>Event Log</h2>
             <div class="actions" style="margin: 0">
@@ -1138,7 +1143,7 @@
 
         // CHANGED: New endpoint /test/actuator
         const result = await apiCall("/test/actuator", "POST", { actuator, value });
-
+        
         if (result.success) {
           showNotification(`✅ ${actuator.toUpperCase()} activated`, "success");
         } else {
@@ -1206,7 +1211,7 @@
         pollInterval = setInterval(() => {
           updateStatus();
           refreshLogs();
-        }, 3000);
+        }, 5000);
       }
 
       function stopPolling() {

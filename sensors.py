@@ -9,6 +9,9 @@ from gpiozero import MotionSensor
 # CircuitPython DHT stack
 import adafruit_dht
 import board
+import RPi.GPIO as GPIO
+from mfrc522 import SimpleMFRC522
+import logging
 
 def iso_now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
@@ -104,3 +107,21 @@ class UsbCamera:
                 return filename
             finally:
                 cap.release()
+
+
+
+class RFIDReader:
+    def __init__(self):
+        # Suppress GPIO warnings
+        GPIO.setwarnings(False)
+        self.reader = SimpleMFRC522()
+
+    def scan(self):
+        try:
+            id, _ = self.reader.read()
+            print('ID: ', id)
+            return id
+            
+        except Exception as e:
+            logging.error(f"RFID Scan error: {e}")
+            return None

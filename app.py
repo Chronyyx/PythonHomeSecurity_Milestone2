@@ -12,12 +12,12 @@ from flask import Flask, jsonify, request, send_from_directory, render_template
 from flask_cors import CORS
 
 # Import our modules
-from sensors import PirReader, DhtReader, UsbCamera
+from sensors import PirReader, DhtReader, UsbCamera, RFIDReader
 from actuators import Actuators
 from adafruit_io import AdafruitIOClient
-from rfid_reader import RFIDReader
 import RPi.GPIO as GPIO
-
+from dotenv import load_dotenv
+import queue
 # ============================================================================
 # CONFIGURATION & ENUMS
 # ============================================================================
@@ -43,18 +43,29 @@ def load_config(path="config/config.json"):
         config = json.load(f)
     
     # Environment overrides
-    if os.getenv("ADAFRUIT_IO_USERNAME"):
-        config["adafruit_io"]["username"] = os.getenv("ADAFRUIT_IO_USERNAME")
-    if os.getenv("ADAFRUIT_IO_KEY"):
-        config["adafruit_io"]["key"] = os.getenv("ADAFRUIT_IO_KEY")
+    env_path = Path('.env')
+
+    load_dotenv()
     
-    # Authorized RFID tags (comma separated in ENV or list in json)
-    env_rfids = os.getenv("AUTHORIZED_RFID_IDS")
-    if env_rfids:
-        config["authorized_rfids"] = [int(x.strip()) for x in env_rfids.split(",")]
-    elif "authorized_rfids" not in config:
-        config["authorized_rfids"] = [] # Default empty
-        
+    username = os.getenv('ADAFRUIT_IO_USERNAME')
+    key = os.getenv('ADAFRUIT_IO_KEY')
+    rfid_id = os.getenv('AUTHORIZED_RFID_ID')
+    rfid_ids = os.getenv('AUTHORIZED_RFID_IDS')
+
+    if username:
+        config["adafruit_io"]["username"] = username
+    if key:
+        config["adafruit_io"]["key"] = key
+    # Support either a single ID or a comma-separated list of IDs in the environment.
+    # Normalize to a list of ints under the key `authorized_rfids` so the rest of
+    # the code can check membership safely.
+    authorized_list = []
+    if rfid_ids:
+        # e.g. "123,456"
+        config["authorized_rfids"] = [int(x.strip()) for x in rfid_ids.split(',') if x.strip()]
+    elif rfid_id:
+        config["authorized_rfids"] = [int(rfid_id.strip())]
+
     return config
 
 def setup_logging(log_dir="logs"):
@@ -97,7 +108,7 @@ class SecuritySystem:
             )
             self.actuators = Actuators(
                 led_bcm=config["pins"]["led_bcm"],
-                beeper_bcm=config["pins"]["beeper_bcm"],
+                buzzer_bcm=config["pins"]["buzzer_bcm"],
                 servo_bcm=config["pins"]["servo_bcm"]
             )
             self.rfid_reader = RFIDReader()
@@ -111,7 +122,9 @@ class SecuritySystem:
             key=config["adafruit_io"].get("key", ""),
             host=config["adafruit_io"].get("host", "io.adafruit.com")
         )
-        
+
+        self.upload_queue = queue.Queue()
+
         # State Variables
         self.mode = SystemMode.DISARMED
         self.stealth_mode = False
@@ -123,10 +136,25 @@ class SecuritySystem:
         self.last_photo_time = 0
         
         # Threading
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.running = False
         
         self.event_log = []
+
+    def loop_cloud_worker(self):
+        # Background thread to handle network requests so main threads don't block
+        while self.running:
+            try:
+                task = self.upload_queue.get(timeout=1)
+                feed_key, value = task
+
+                self.aio_client.publish(feed_key, value)
+
+                self.upload_queue.task_done()
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logging.error(f"Cloud upload failed: {e}")
 
     def log_event(self, event_type: str, details: str = ""):
         entry = {
@@ -144,7 +172,9 @@ class SecuritySystem:
         
         # Cloud Sync
         if "event_log" in self.config["adafruit_io"]["feeds"]:
-            self.aio_client.publish(self.config["adafruit_io"]["feeds"]["event_log"], 1)
+            feed = self.config["adafruit_io"]["feeds"]["event_log"]
+            self.upload_queue.put((feed, 1))
+            # self.aio_client.publish(self.config["adafruit_io"]["feeds"]["event_log"], 1)
         
         # TODO: Send to Neon.com here
         # neon_client.insert_log(entry)
@@ -171,7 +201,7 @@ class SecuritySystem:
             if self.stealth_mode:
                 self.led_state = LEDState.OFF
             else:
-                self.led_state = LEDState.SOLID # Or OFF depending on pref, prompt says OFF if stealth
+                self.led_state = LEDState.SOLID 
             
             self.aio_client.publish(self.config["adafruit_io"]["feeds"]["mode"], 1)
             return True
@@ -202,35 +232,35 @@ class SecuritySystem:
         """Called when PIR detects motion"""
         now = time.time()
         self.last_motion_time = now
+
+        # We need to know the mode, but we shouldn't hold the lock while taking photos
+        current_mode = SystemMode.DISARMED
+        should_take_photo = False
         
         with self.lock:
+            current_mode = self.mode
             if self.mode == SystemMode.DISARMED:
                 return # Ignore motion when disarmed
             
-            # Publish motion event
-            self.aio_client.publish(self.config["adafruit_io"]["feeds"]["motion"], 1)
+            feed = self.config["adafruit_io"]["feeds"]["motion"]
+            self.upload_queue.put((feed, 1))
 
-            if self.mode == SystemMode.ARMED:
-                # Transition to PRE-ALARM
+            if current_mode == SystemMode.ARMED:
                 self.mode = SystemMode.PRE_ALARM
                 self.pre_alarm_start_time = now
                 self.log_event("MOTION_DETECTED", "Entering Pre-Alarm")
-                
-                # Immediate Photo
+                self.led_state = LEDState.SOLID
                 self._take_photo("Motion Trigger")
                 
-                # Warning State
-                self.led_state = LEDState.SOLID
-                # Note: Beep logic handled in main loop
-
-            elif self.mode == SystemMode.PRE_ALARM:
-                # Timer handled in loop
-                pass
-
-            elif self.mode == SystemMode.ALARM:
-                # Already alarming, maybe take more photos?
+            elif current_mode == SystemMode.ALARM:
                 if now - self.last_photo_time >= self.config["logic"]["photo_interval_seconds"]:
-                    self._take_photo("Alarm Interval")
+                    should_take_photo = True
+
+        #  Lock is released here
+        #  Now we can take the photo without blocking RFID or APIs
+        if should_take_photo:
+            reason = "Motion Trigger" if current_mode == SystemMode.ARMED else "Alarm Interval"
+            self._take_photo(reason)
 
     def _take_photo(self, reason):
         try:
@@ -249,11 +279,6 @@ class SecuritySystem:
             with self.lock:
                 now = time.time()
                 
-                # 1. PIR Poll
-                if self.pir.read_state() == 1:
-                    # Release lock briefly to handle complex logic inside handle_motion
-                    pass 
-                # Actually, PIR object handles debounce, just check it
                 if self.pir.read_state():
                      threading.Thread(target=self.handle_motion).start()
 
@@ -323,27 +348,21 @@ class SecuritySystem:
         while self.running:
             try:
                 tag_id = self.rfid_reader.scan()
-                if tag_id:
-                    logging.info(f"RFID Detected: {tag_id}")
-                    # Check authorization
-                    authorized_ids = self.config.get("authorized_rfids", [])
-                    
-                    # If list is empty, allow ALL (Debug mode) or deny ALL?
-                    # Let's assume allow if list is empty for testing, OR stricter check
-                    is_auth = tag_id in authorized_ids or len(authorized_ids) == 0
-                    
+                # Compare against configured authorized IDs (normalized to a list).
+                authorized = self.config.get("authorized_rfids", [])
+                if not authorized:
+                    logging.error("No authorized RFIDs configured")
+                else:
+                    # Compare by string to be robust against int/str mismatches
+                    is_auth = any(str(tag_id) == str(a) for a in authorized)
                     if is_auth:
                         if self.mode == SystemMode.DISARMED:
-                            self.arm_system(rfid_id=tag_id)
+                            self.arm_system()
                         else:
-                            self.disarm_system(rfid_id=tag_id)
+                            self.disarm_system()
                         time.sleep(2) # Prevent double toggle
                     else:
-                        self.log_event("AUTH_FAIL", f"Unauthorized ID: {tag_id}")
-                        self.actuators.beep_once(0.5) # Long beep for reject
-                        time.sleep(1)
-                else:
-                    time.sleep(0.2)
+                        logging.error(f"Unauthorized RFID ID: {tag_id}")
             except Exception as e:
                 logging.error(f"RFID Loop Error: {e}")
                 time.sleep(1)
@@ -366,7 +385,8 @@ class SecuritySystem:
         threading.Thread(target=self.loop_led, daemon=True).start()
         threading.Thread(target=self.loop_rfid, daemon=True).start()
         threading.Thread(target=self.loop_sensors, daemon=True).start()
-        
+
+        threading.Thread(target=self.loop_cloud_worker, daemon=True).start()
         # Ensure servo is in correct state for startup (Disarmed -> Unlocked)
         self.actuators.unlock_box()
         logging.info("System Started")
@@ -439,7 +459,7 @@ def api_test():
     data = request.json
     act = data.get("actuator")
     val = data.get("value")
-    
+    print("ACTIVATED", data, act, val)
     if act == "servo":
         if val == "lock": system.actuators.lock_box()
         else: system.actuators.unlock_box()

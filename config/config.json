@@ -14,7 +14,7 @@
   },
   "pins": {
     "led_bcm": 27,
-    "beeper_bcm": 13,
+    "buzzer_bcm": 13,
     "servo_bcm": 18,
     "dht_bcm": "D4",
     "pir_bcm": 17
