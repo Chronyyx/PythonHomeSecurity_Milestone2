@@ -1,7 +1,6 @@
 import logging
 import math
-from gpiozero import LED, AngularServo, TonalBuzzer, OutputDevice
-from gpiozero.tones import Tone
+from gpiozero import LED, AngularServo, PWMOutputDevice
 from time import sleep
 from gpiozero.pins.pigpio import PiGPIOFactory
 
@@ -9,8 +8,8 @@ class Actuators:
     def __init__(self, led_bcm: int, buzzer_bcm: int, servo_bcm: int):
         self.led = LED(led_bcm)
         
-        # Use TonalBuzzer for PWM control (compatible with gpiozero)
-        self.buzzer = TonalBuzzer(buzzer_bcm)
+        # Use PWMOutputDevice for direct frequency control
+        self.buzzer = PWMOutputDevice(buzzer_bcm, frequency=2000)
         self.buzzer_pin = buzzer_bcm
 
         # Initialize Servo
@@ -41,18 +40,22 @@ class Actuators:
 
     def buzz_once(self, duration=0.2):
         """Play a sine wave tone"""
-        # Simple rising tone effect
-        for freq in range(1500, 2500, 100):
-            self.buzzer.play(Tone(freq))
-            sleep(0.02)
-        self.buzzer.stop()
+        # Sine wave frequency sweep like the YouTube example
+        for x in range(0, 361, 5):  # Step by 5 for smoother sound
+            sinVal = math.sin(x * (math.pi / 180))
+            toneVal = 2000 + sinVal * 500
+            self.buzzer.frequency = toneVal
+            self.buzzer.value = 0.5  # 50% duty cycle
+            sleep(0.002)
+        self.buzzer.off()
 
     def alarm_active(self, state: bool):
         """Continuous alarm sound"""
         if state:
-            self.buzzer.play(Tone(2000))  # 2000Hz tone
+            self.buzzer.frequency = 2000
+            self.buzzer.value = 0.5  # 50% duty cycle for continuous tone
         else:
-            self.buzzer.stop()
+            self.buzzer.off()
 
     def led_on(self):
         self.led.on()
@@ -62,7 +65,7 @@ class Actuators:
 
     def shutdown(self):
         self.led.off()
-        self.buzzer.stop()
+        self.buzzer.off()
         self.buzzer.close()
         self.servo.detach()
         self.servo.close()
