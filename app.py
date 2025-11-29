@@ -289,7 +289,7 @@ class SecuritySystem:
                     # Warning Beeps (every 2s)
                     if int(elapsed) % 2 == 0 and (elapsed - int(elapsed) < 0.1):
                          # Quick beep in background
-                         threading.Thread(target=self.actuators.beep_once, args=(0.1,)).start()
+                         threading.Thread(target=self.actuators.buzz_once, args=(0.1,)).start()
 
                     # Timeout Check
                     if elapsed > self.config["logic"]["pre_alarm_delay_seconds"]:
@@ -464,7 +464,7 @@ def api_test():
         if val == "lock": system.actuators.lock_box()
         else: system.actuators.unlock_box()
     elif act == "buzzer":
-        system.actuators.beep_once()
+        system.actuators.buzz_once()
     elif act == "led":
         system.actuators.led_on()
         time.sleep(1)

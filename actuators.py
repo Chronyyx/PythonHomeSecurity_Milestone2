@@ -6,15 +6,15 @@ from time import sleep
 from gpiozero.pins.pigpio import PiGPIOFactory
 
 class Actuators:
-    def __init__(self, led_bcm: int, beeper_bcm: int, servo_bcm: int):
+    def __init__(self, led_bcm: int, buzzer_bcm: int, servo_bcm: int):
         self.led = LED(led_bcm)
         
         # Setup buzzer with PWM for tonal control
-        self.beeper_pin = beeper_bcm
+        self.buzzer_pin = buzzer_bcm
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.beeper_pin, GPIO.OUT)
-        self.beeper_pwm = GPIO.PWM(self.beeper_pin, 1)
-        self.beeper_pwm.start(0) 
+        GPIO.setup(self.buzzer_pin, GPIO.OUT)
+        self.buzzer_pwm = GPIO.PWM(self.buzzer_pin, 1)
+        self.buzzer_pwm.start(0)
 
         # Initialize Servo
         # Note: Jitter is common with standard GPIO. 
@@ -42,23 +42,23 @@ class Actuators:
         sleep(0.5)
         self.servo.detach()
 
-    def beep_once(self, duration=0.2):
+    def buzz_once(self, duration=0.2):
         """Play a sine wave tone"""
-        self.beeper_pwm.start(50)
+        self.buzzer_pwm.start(50)
         for x in range(0, 361):
             sinVal = math.sin(x * (math.pi / 180))
             toneVal = 2000 + sinVal * 500
-            self.beeper_pwm.ChangeFrequency(toneVal)
+            self.buzzer_pwm.ChangeFrequency(toneVal)
             sleep(0.001)
-        self.beeper_pwm.stop()
+        self.buzzer_pwm.stop()
 
     def alarm_active(self, state: bool):
         """Continuous alarm sound"""
         if state:
-            self.beeper_pwm.start(50)
-            self.beeper_pwm.ChangeFrequency(2000)
+            self.buzzer_pwm.start(50)
+            self.buzzer_pwm.ChangeFrequency(2000)
         else:
-            self.beeper_pwm.stop()
+            self.buzzer_pwm.stop()
 
     def led_on(self):
         self.led.on()
@@ -68,8 +68,8 @@ class Actuators:
 
     def shutdown(self):
         self.led.off()
-        self.beeper_pwm.stop()
-        GPIO.cleanup(self.beeper_pin)
+        self.buzzer_pwm.stop()
+        GPIO.cleanup(self.buzzer_pin)
         self.servo.detach()
         self.servo.close()
         self.led.close()
