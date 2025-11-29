@@ -13,8 +13,8 @@ class Actuators:
         self.buzzer_pin = buzzer_bcm
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.buzzer_pin, GPIO.OUT)
-        self.buzzer_pwm = GPIO.PWM(self.buzzer_pin, 1)
-        self.buzzer_pwm.start(0)
+        self.buzzer_pwm = GPIO.PWM(self.buzzer_pin, 2000)  # Start with 2000 Hz
+        self.buzzer_pwm.start(0)  # 0% duty cycle (off)
 
         # Initialize Servo
         # Note: Jitter is common with standard GPIO. 
@@ -44,21 +44,21 @@ class Actuators:
 
     def buzz_once(self, duration=0.2):
         """Play a sine wave tone"""
-        self.buzzer_pwm.start(50)
         for x in range(0, 361):
             sinVal = math.sin(x * (math.pi / 180))
             toneVal = 2000 + sinVal * 500
             self.buzzer_pwm.ChangeFrequency(toneVal)
+            self.buzzer_pwm.ChangeDutyCycle(50)  # Set duty cycle during tone
             sleep(0.001)
-        self.buzzer_pwm.stop()
+        self.buzzer_pwm.ChangeDutyCycle(0)  # Turn off
 
     def alarm_active(self, state: bool):
         """Continuous alarm sound"""
         if state:
-            self.buzzer_pwm.start(50)
             self.buzzer_pwm.ChangeFrequency(2000)
+            self.buzzer_pwm.ChangeDutyCycle(50)  # Turn on
         else:
-            self.buzzer_pwm.stop()
+            self.buzzer_pwm.ChangeDutyCycle(0)  # Turn off
 
     def led_on(self):
         self.led.on()
@@ -68,6 +68,7 @@ class Actuators:
 
     def shutdown(self):
         self.led.off()
+        self.buzzer_pwm.ChangeDutyCycle(0)
         self.buzzer_pwm.stop()
         GPIO.cleanup(self.buzzer_pin)
         self.servo.detach()
