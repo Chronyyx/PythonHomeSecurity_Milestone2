@@ -33,7 +33,7 @@
     "photo_interval_seconds": 5
   },
   "servo_angle": {
-    "locked": 0,
-    "unlocked": 90
+    "locked": 90,
+    "unlocked": 0
   }
 }

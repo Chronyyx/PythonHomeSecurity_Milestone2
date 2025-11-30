@@ -97,6 +97,9 @@ class SecuritySystem:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         
+        # Clean up any GPIO pins that might be in use from a previous run
+        GPIO.cleanup()
+        
         # Hardware Initialization
         try:
             self.pir = PirReader(config["pins"]["pir_bcm"], debounce_s=config["logic"]["pir_debounce_seconds"])
@@ -286,10 +289,10 @@ class SecuritySystem:
                 if self.mode == SystemMode.PRE_ALARM:
                     elapsed = now - self.pre_alarm_start_time
                     
-                    # Warning Beeps (every 2s)
-                    if int(elapsed) % 2 == 0 and (elapsed - int(elapsed) < 0.1):
+                    # Warning Beeps (every 5s)
+                    if int(elapsed) % 5 == 0 and (elapsed - int(elapsed) < 0.1):
                          # Quick beep in background
-                         threading.Thread(target=self.actuators.buzz_once, args=(0.1,)).start()
+                         threading.Thread(target=self.actuators.buzz_once, args=(0.2,)).start()
 
                     # Timeout Check
                     if elapsed > self.config["logic"]["pre_alarm_delay_seconds"]:
@@ -412,10 +415,17 @@ def index():
 @app.route('/api/status')
 def get_status():
     if not system: return jsonify({"error": "init"}), 500
+    temp, hum = system.dht.read()
     return jsonify({
-        "mode": system.mode.value,
-        "stealth": system.stealth_mode,
-        "temp": system.dht.read() 
+        "status": {
+            "mode": system.mode.value,
+            "stealth_mode": system.stealth_mode,
+            "servo_position": system.actuators.current_servo_position
+        },
+        "temperature": {
+            "temperature": temp,
+            "humidity": hum
+        }
     })
 
 @app.route('/api/arm', methods=['POST'])
@@ -466,13 +476,56 @@ def api_test():
     elif act == "buzzer":
         system.actuators.buzz_once()
     elif act == "led":
-        system.actuators.led_on()
-        time.sleep(1)
-        system.actuators.led_off()
+        system.led_state = LEDState.OFF  # Pause normal LED loop
+        # time.sleep(1)
+        system.actuators.test_led()
+        system.led_state = LEDState.SLOW_BLINK  # Resume normal LED loop
     elif act == "camera":
         system._take_photo("Manual Test")
         
     return jsonify({"success": True})
+
+@app.route('/api/history/temperature')
+def api_history_temperature():
+    """Fetch temperature history from Adafruit IO"""
+    start_date = request.args.get('start')
+    end_date = request.args.get('end')
+    
+    try:
+        feed_key = system.config["adafruit_io"]["feeds"]["temperature"]
+        data = system.aio_client.get_data(feed_key, start_time=start_date, end_time=end_date)
+        return jsonify({"success": True, "data": data})
+    except Exception as e:
+        logging.error(f"Failed to fetch temperature history: {e}")
+        return jsonify({"success": False, "error": str(e), "data": []})
+
+@app.route('/api/history/humidity')
+def api_history_humidity():
+    """Fetch humidity history from Adafruit IO"""
+    start_date = request.args.get('start')
+    end_date = request.args.get('end')
+    
+    try:
+        feed_key = system.config["adafruit_io"]["feeds"]["humidity"]
+        data = system.aio_client.get_data(feed_key, start_time=start_date, end_time=end_date)
+        return jsonify({"success": True, "data": data})
+    except Exception as e:
+        logging.error(f"Failed to fetch humidity history: {e}")
+        return jsonify({"success": False, "error": str(e), "data": []})
+
+@app.route('/api/history/motion')
+def api_history_motion():
+    """Fetch motion detection history from Adafruit IO"""
+    start_date = request.args.get('start')
+    end_date = request.args.get('end')
+    
+    try:
+        feed_key = system.config["adafruit_io"]["feeds"]["motion"]
+        data = system.aio_client.get_data(feed_key, start_time=start_date, end_time=end_date)
+        return jsonify({"success": True, "data": data})
+    except Exception as e:
+        logging.error(f"Failed to fetch motion history: {e}")
+        return jsonify({"success": False, "error": str(e), "data": []})
 
 if __name__ == '__main__':
     setup_logging()

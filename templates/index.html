@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AnLex Guard • Security Dashboard</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
       :root {
         --bg: #0b0f14;
@@ -311,7 +314,7 @@
       }
       .log-entry {
         display: grid;
-        grid-template-columns: 140px 100px 1fr;
+        grid-template-columns: 140px 160px 1fr;
         gap: 12px;
         padding: 12px 16px;
         border-bottom: 1px solid var(--border);
@@ -493,6 +496,56 @@
         font-size: 14px;
       }
 
+      /* Chart Styles */
+      .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+        padding: 16px 0;
+      }
+
+      .date-selector {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+
+      .date-selector label {
+        font-size: 13px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .date-selector input[type="date"],
+      .date-selector input[type="time"] {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 12px;
+        color: var(--text);
+        font-size: 13px;
+        min-width: 120px;
+      }
+
+      .date-selector input[type="time"] {
+        min-width: 90px;
+      }
+
+      .date-selector input[type="date"]::-webkit-calendar-picker-indicator,
+      .date-selector input[type="time"]::-webkit-calendar-picker-indicator {
+        filter: invert(0.7);
+        cursor: pointer;
+      }
+
+      .date-group {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
       footer {
         margin: 48px 0 24px;
         color: var(--muted);
@@ -659,6 +712,62 @@
           </div>
         </article>
 
+        <!-- Temperature & Humidity Chart -->
+        <article class="card span-6">
+          <div class="hd">
+            <h2>Temperature & Humidity History</h2>
+            <span class="pill">24 Hours</span>
+          </div>
+          <div class="bd">
+            <div class="date-selector">
+              <label>From:</label>
+              <div class="date-group">
+                <input type="date" id="temp-date-start" />
+                <input type="time" id="temp-time-start" value="00:00" />
+              </div>
+              <label>To:</label>
+              <div class="date-group">
+                <input type="date" id="temp-date-end" />
+                <input type="time" id="temp-time-end" value="23:59" />
+              </div>
+              <button class="btn" onclick="updateTempHumChart()">
+                <span>🔄</span> Update
+              </button>
+            </div>
+            <div class="chart-container">
+              <canvas id="temp-hum-chart"></canvas>
+            </div>
+          </div>
+        </article>
+
+        <!-- Motion Detection Chart -->
+        <article class="card span-6">
+          <div class="hd">
+            <h2>Motion Detection History</h2>
+            <span class="pill">24 Hours</span>
+          </div>
+          <div class="bd">
+            <div class="date-selector">
+              <label>From:</label>
+              <div class="date-group">
+                <input type="date" id="motion-date-start" />
+                <input type="time" id="motion-time-start" value="00:00" />
+              </div>
+              <label>To:</label>
+              <div class="date-group">
+                <input type="date" id="motion-date-end" />
+                <input type="time" id="motion-time-end" value="23:59" />
+              </div>
+              <button class="btn" onclick="updateMotionChart()">
+                <span>🔄</span> Update
+              </button>
+            </div>
+            <div class="chart-container">
+              <canvas id="motion-chart"></canvas>
+            </div>
+          </div>
+        </article>
+
         <!-- Manual Controls -->
         <article class="card span-4">
           <div class="hd">
@@ -674,30 +783,13 @@
               <span>🔊</span> Test Buzzer (3s)
             </button>
           
-            <button class="btn" onclick="testActuator('servo', 'unlock')">
-              <span>🔓</span> Unlock Servo (3s)
-            </button>
-            <button class="btn" onclick="testActuator('servo', 'lock')">
-              <span>🔒</span> Lock Servo (3s)
+            <button class="btn" id="servo-toggle-btn" onclick="toggleServo()">
+              <span id="servo-icon">🔓</span> <span id="servo-text">Unlock Servo</span>
             </button>
 
             <button class="btn primary" onclick="testActuator('camera', null)">
               <span>📸</span> Test Camera
             </button>
-
-            <div
-              style="
-                margin-top: 8px;
-                padding: 12px;
-                background: var(--panel-2);
-                border-radius: 8px;
-                font-size: 12px;
-                color: var(--muted);
-              "
-            >
-              ⚠️ These controls are for testing only. They bypass the normal
-              security logic.
-            </div>
           </div>
         </article>
 
@@ -886,9 +978,15 @@
       let pollInterval = null;
       let currentMode = "disarmed";
 
+      // Chart instances
+      let tempHumChart = null;
+      let motionChart = null;
+
       // Initialize
       document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("api-url").textContent = API_BASE;
+        initializeDateSelectors();
+        initializeCharts();
         startPolling();
         checkHealth();
       });
@@ -999,9 +1097,25 @@
           ? "Disable"
           : "Enable";
 
-        // Update box status
+        // Update box status display
         document.getElementById("box-status").textContent =
           currentMode === "disarmed" ? "Unlocked" : "Locked";
+
+        // Update servo toggle button based on actual servo position
+        const servoIcon = document.getElementById("servo-icon");
+        const servoText = document.getElementById("servo-text");
+        
+        if (status.servo_position !== null && status.servo_position !== undefined) {
+          // Position 0 = unlocked, 90 = locked (or other lock angle)
+          const isLocked = status.servo_position !== 0;
+          if (isLocked) {
+            servoIcon.textContent = "🔓";
+            servoText.textContent = "Unlock Servo";
+          } else {
+            servoIcon.textContent = "🔒";
+            servoText.textContent = "Lock Servo";
+          }
+        }
 
         updateConnectionStatus(true);
         document.getElementById("last-updated").textContent =
@@ -1153,6 +1267,43 @@
         if(btn) btn.disabled = false;
       }
 
+      // Servo Toggle Function
+      async function toggleServo() {
+        const btn = document.getElementById("servo-toggle-btn");
+        const icon = document.getElementById("servo-icon");
+        const text = document.getElementById("servo-text");
+        
+        btn.disabled = true;
+
+        // Determine current state from the button text
+        const isCurrentlyLocked = text.textContent.includes("Unlock");
+        const targetAction = isCurrentlyLocked ? "unlock" : "lock";
+        
+        const result = await apiCall("/test/actuator", "POST", { 
+          actuator: "servo", 
+          value: targetAction 
+        });
+        
+        if (result.success) {
+          // Update button appearance immediately
+          if (targetAction === "unlock") {
+            icon.textContent = "🔒";
+            text.textContent = "Lock Servo";
+            showNotification("✅ Servo unlocked", "success");
+          } else {
+            icon.textContent = "🔓";
+            text.textContent = "Unlock Servo";
+            showNotification("✅ Servo locked", "success");
+          }
+          // Refresh status to get actual servo position
+          await updateStatus();
+        } else {
+          showNotification("❌ Servo toggle failed", "error");
+        }
+
+        btn.disabled = false;
+      }
+
       // Settings
       async function saveSettings() {
         const settings = {
@@ -1224,6 +1375,343 @@
       function showNotification(message, type) {
         console.log(`[${type.toUpperCase()}] ${message}`);
         document.getElementById("last-activity").textContent = message;
+      }
+
+      // ===== CHART FUNCTIONS =====
+
+      function initializeDateSelectors() {
+        // Set default date range to last 24 hours
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        
+        const formatDate = (date) => {
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
+
+        const formatTime = (date) => {
+          const hours = String(date.getHours()).padStart(2, '0');
+          const minutes = String(date.getMinutes()).padStart(2, '0');
+          return `${hours}:${minutes}`;
+        };
+
+        // Temperature & Humidity selectors
+        document.getElementById('temp-date-start').value = formatDate(yesterday);
+        document.getElementById('temp-time-start').value = formatTime(yesterday);
+        document.getElementById('temp-date-end').value = formatDate(now);
+        document.getElementById('temp-time-end').value = formatTime(now);
+        
+        // Motion selectors
+        document.getElementById('motion-date-start').value = formatDate(yesterday);
+        document.getElementById('motion-time-start').value = formatTime(yesterday);
+        document.getElementById('motion-date-end').value = formatDate(now);
+        document.getElementById('motion-time-end').value = formatTime(now);
+      }
+
+      function initializeCharts() {
+        // Temperature & Humidity Chart
+        const tempHumCtx = document.getElementById('temp-hum-chart').getContext('2d');
+        tempHumChart = new Chart(tempHumCtx, {
+          type: 'line',
+          data: {
+            datasets: [
+              {
+                label: 'Temperature (°C)',
+                data: [],
+                borderColor: 'rgb(106, 163, 255)',
+                backgroundColor: 'rgba(106, 163, 255, 0.1)',
+                yAxisID: 'y',
+                tension: 0.4,
+                fill: true
+              },
+              {
+                label: 'Humidity (%)',
+                data: [],
+                borderColor: 'rgb(46, 204, 113)',
+                backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                yAxisID: 'y1',
+                tension: 0.4,
+                fill: true
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              mode: 'index',
+              intersect: false,
+            },
+            plugins: {
+              legend: {
+                display: true,
+                labels: {
+                  color: '#e6edf3',
+                  font: {
+                    size: 12
+                  }
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(18, 24, 37, 0.95)',
+                titleColor: '#e6edf3',
+                bodyColor: '#8ea0b6',
+                borderColor: '#213046',
+                borderWidth: 1
+              }
+            },
+            scales: {
+              x: {
+                type: 'time',
+                time: {
+                  unit: 'hour',
+                  displayFormats: {
+                    hour: 'MMM d, HH:mm'
+                  }
+                },
+                grid: {
+                  color: 'rgba(33, 48, 70, 0.5)'
+                },
+                ticks: {
+                  color: '#8ea0b6',
+                  font: {
+                    size: 11
+                  }
+                }
+              },
+              y: {
+                type: 'linear',
+                display: true,
+                position: 'left',
+                title: {
+                  display: true,
+                  text: 'Temperature (°C)',
+                  color: '#6aa3ff'
+                },
+                grid: {
+                  color: 'rgba(33, 48, 70, 0.5)'
+                },
+                ticks: {
+                  color: '#8ea0b6',
+                  font: {
+                    size: 11
+                  }
+                }
+              },
+              y1: {
+                type: 'linear',
+                display: true,
+                position: 'right',
+                title: {
+                  display: true,
+                  text: 'Humidity (%)',
+                  color: '#2ecc71'
+                },
+                grid: {
+                  drawOnChartArea: false,
+                },
+                ticks: {
+                  color: '#8ea0b6',
+                  font: {
+                    size: 11
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        // Motion Detection Chart
+        const motionCtx = document.getElementById('motion-chart').getContext('2d');
+        motionChart = new Chart(motionCtx, {
+          type: 'bar',
+          data: {
+            datasets: [{
+              label: 'Motion Events',
+              data: [],
+              backgroundColor: 'rgba(241, 196, 15, 0.7)',
+              borderColor: 'rgb(241, 196, 15)',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                labels: {
+                  color: '#e6edf3',
+                  font: {
+                    size: 12
+                  }
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(18, 24, 37, 0.95)',
+                titleColor: '#e6edf3',
+                bodyColor: '#8ea0b6',
+                borderColor: '#213046',
+                borderWidth: 1
+              }
+            },
+            scales: {
+              x: {
+                type: 'time',
+                time: {
+                  unit: 'hour',
+                  displayFormats: {
+                    hour: 'MMM d, HH:mm'
+                  }
+                },
+                grid: {
+                  color: 'rgba(33, 48, 70, 0.5)'
+                },
+                ticks: {
+                  color: '#8ea0b6',
+                  font: {
+                    size: 11
+                  }
+                }
+              },
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Events Count',
+                  color: '#f1c40f'
+                },
+                grid: {
+                  color: 'rgba(33, 48, 70, 0.5)'
+                },
+                ticks: {
+                  color: '#8ea0b6',
+                  font: {
+                    size: 11
+                  },
+                  stepSize: 1
+                }
+              }
+            }
+          }
+        });
+
+        // Load initial data
+        updateTempHumChart();
+        updateMotionChart();
+      }
+
+      async function updateTempHumChart() {
+        const startDate = document.getElementById('temp-date-start').value;
+        const startTime = document.getElementById('temp-time-start').value;
+        const endDate = document.getElementById('temp-date-end').value;
+        const endTime = document.getElementById('temp-time-end').value;
+        
+        if (!startDate || !startTime || !endDate || !endTime) {
+          showNotification('Please select all date and time fields', 'error');
+          return;
+        }
+
+        // Combine date and time into ISO format
+        const startDateTime = `${startDate}T${startTime}:00`;
+        const endDateTime = `${endDate}T${endTime}:00`;
+
+        showNotification('Loading temperature & humidity data...', 'info');
+
+        const data = await apiCall(`/history/temperature?start=${startDateTime}&end=${endDateTime}`);
+        
+        if (data.error) {
+          showNotification('Failed to load temperature data', 'error');
+          return;
+        }
+
+        if (data.data && data.data.length > 0) {
+          // Process temperature data
+          const tempData = data.data.map(item => ({
+            x: new Date(item.created_at),
+            y: parseFloat(item.value)
+          }));
+
+          tempHumChart.data.datasets[0].data = tempData;
+          
+          // Fetch humidity data
+          const humData = await apiCall(`/history/humidity?start=${startDateTime}&end=${endDateTime}`);
+          
+          if (humData.data && humData.data.length > 0) {
+            const humidityData = humData.data.map(item => ({
+              x: new Date(item.created_at),
+              y: parseFloat(item.value)
+            }));
+            tempHumChart.data.datasets[1].data = humidityData;
+          }
+
+          tempHumChart.update();
+          showNotification(`Loaded ${tempData.length} temperature readings`, 'success');
+        } else {
+          tempHumChart.data.datasets[0].data = [];
+          tempHumChart.data.datasets[1].data = [];
+          tempHumChart.update();
+          showNotification('No data available for selected period', 'info');
+        }
+      }
+
+      async function updateMotionChart() {
+        const startDate = document.getElementById('motion-date-start').value;
+        const startTime = document.getElementById('motion-time-start').value;
+        const endDate = document.getElementById('motion-date-end').value;
+        const endTime = document.getElementById('motion-time-end').value;
+        
+        if (!startDate || !startTime || !endDate || !endTime) {
+          showNotification('Please select all date and time fields', 'error');
+          return;
+        }
+
+        // Combine date and time into ISO format
+        const startDateTime = `${startDate}T${startTime}:00`;
+        const endDateTime = `${endDate}T${endTime}:00`;
+
+        showNotification('Loading motion detection data...', 'info');
+
+        const data = await apiCall(`/history/motion?start=${startDateTime}&end=${endDateTime}`);
+        
+        if (data.error) {
+          showNotification('Failed to load motion data', 'error');
+          return;
+        }
+
+        if (data.data && data.data.length > 0) {
+          // Aggregate motion events by hour
+          const motionByHour = {};
+          
+          data.data.forEach(item => {
+            const date = new Date(item.created_at);
+            const hourKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours());
+            const hourStr = hourKey.toISOString();
+            
+            if (!motionByHour[hourStr]) {
+              motionByHour[hourStr] = 0;
+            }
+            // Count motion events (assuming value of 1 means motion detected)
+            if (parseFloat(item.value) > 0) {
+              motionByHour[hourStr]++;
+            }
+          });
+
+          const motionData = Object.keys(motionByHour).map(key => ({
+            x: new Date(key),
+            y: motionByHour[key]
+          })).sort((a, b) => a.x - b.x);
+
+          motionChart.data.datasets[0].data = motionData;
+          motionChart.update();
+          showNotification(`Loaded ${motionData.length} motion data points`, 'success');
+        } else {
+          motionChart.data.datasets[0].data = [];
+          motionChart.update();
+          showNotification('No motion data for selected period', 'info');
+        }
       }
 
       window.addEventListener("beforeunload", () => {
