@@ -1,22 +1,23 @@
 {
   "adafruit_io": {
-    "username": "YOUR_AIO_USERNAME",
-    "key": "YOUR_AIO_KEY",
     "host": "io.adafruit.com",
     "port": 8883,
     "use_tls": true,
     "feeds": {
       "motion": "sensor.motion",
       "temperature": "sensor.temperature",
-      "humidity": "sensor.humidity"
+      "humidity": "sensor.humidity",
+      "mode": "mode",
+      "alarm": "alarm",
+      "event_log": "events"
     }
   },
   "pins": {
-    "led_bcm": 17,
-    "beeper_bcm": 27,
-    "servo_bcm": 22,
+    "led_bcm": 27,
+    "buzzer_bcm": 13,
+    "servo_bcm": 18,
     "dht_bcm": "D4",
-    "pir_bcm": 23
+    "pir_bcm": 17
   },
   "camera": {
     "device_index": 0,
@@ -25,7 +26,14 @@
   },
   "logic": {
     "read_interval_seconds": 5,
-    "motion_alarm_seconds": 3,
-    "pir_debounce_seconds": 1.0
+    "pir_debounce_seconds": 1.0,
+    "pre_alarm_delay_seconds": 30,
+    "alarm_duration_seconds": 180,
+    "motion_timeout_seconds": 60,
+    "photo_interval_seconds": 5
+  },
+  "servo_angle": {
+    "locked": 90,
+    "unlocked": 0
   }
 }
