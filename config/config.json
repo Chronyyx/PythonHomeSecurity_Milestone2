@@ -25,7 +25,19 @@
   },
   "logic": {
     "read_interval_seconds": 5,
+<<<<<<< Updated upstream
     "motion_alarm_seconds": 3,
     "pir_debounce_seconds": 1.0
+=======
+    "pir_debounce_seconds": 2,
+    "pre_alarm_delay_seconds": 5,
+    "alarm_duration_seconds": 120,
+    "motion_timeout_seconds": 60,
+    "photo_interval_seconds": 5
+  },
+  "servo_angle": {
+    "locked": 90,
+    "unlocked": 0
+>>>>>>> Stashed changes
   }
 }
